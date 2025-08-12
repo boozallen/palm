@@ -1,0 +1,90 @@
+image:
+  name: 'CHANGE_ME'
+  tag: CHANGE_ME
+host: CHANGE_ME
+port: 3000
+env: develop
+ingress_type: nginx
+ingress_path: /
+dockerRegistry:
+  ## @param dockerRegistry should be updated
+  ##
+  url: 'CHANGE_ME'
+  ## @param secret should be updated
+  ##
+  secret: 'CHANGE_ME'
+vault:
+  url: 'CHANGE_ME'
+frontendConfig:
+  ## @param frontendConfig.alias should be updated
+  ##
+  alias: CHANGE_ME.com
+  useMockApi: true
+  apiPath: '/api/v1'
+  ## @param frontendConfig.nodeEnv must be provided, or omitted altogether
+  ##
+  nodeEnv: CHANGE_ME
+  ## @param frontendConfig.enableSecureCookies should be updated (defaults to false)
+  ##
+  enableSecureCookies: CHANGE_ME
+  ## @param frontendConfig.logLevel must be provided, or omitted altogether: (error, warn, info, http, verbose, debug, silly)
+  ##
+  logLevel: CHANGE_ME
+  aws:
+    ## @param frontendConfig.aws.accessKeyId optional
+    ##
+    accessKeyId: CHANGE_ME
+    ## @param frontendConfig.aws.secretAccessKey optional
+    ##
+    secretAccessKey: CHANGE_ME
+    ## @param frontendConfig.aws.sessionToken optional
+    ##
+    sessionToken: CHANGE_ME
+    ## @param frontendConfig.aws.region optional
+    ##
+    region: CHANGE_ME
+  ## @param frontendConfig.nextAuthUrl should be updated
+  ##
+  nextAuthUrl: 'https://CHANGE_ME.com'
+  ## @param frontendConfig.enabledNextAuthProviders options: (azure-ad, keycloak)
+  ##
+  enabledNextAuthProviders: CHANGE_ME
+  ## @param frontendConfig.inheritedOauthRolePath should be updated if using role inheritance
+  ##
+  inheritedOauthRolePath: CHANGE_ME
+  ## @param frontendConfig.dbUrl should be updated
+  ##
+  dbUrl: 'postgresql://<username>:<password>@<database>:<port>/<database_name>'
+  ## @param frontendConfig.migrationDbUrl <placeholder> values should be updated
+  ##
+  migrationDbUrl: 'postgresql://<username>:<password>@<database>:<port>/<database_name>'
+  ## @param frontendConfig.redisHost currently the in the k8 cluster, but should be updated to use AWS ElastiCache endpoint
+  ##
+  redisHost: 'redis-1739297932-master.default.svc.cluster.local'
+  ## @param frontendConfig.redisPort should always be 6379, the port may be unnecessary for AWS ElastiCache
+  ##
+  redisPort: 6379
+postgresql:
+  # Copyright VMware, Inc.
+  # SPDX-License-Identifier: APACHE-2.0
+
+  ## @section PostgreSQL common parameters
+  ##
+  auth:
+    ## @param auth.username Name for a custom user to create
+    ##
+    username: 'CHANGE_ME'
+    ## @param auth.database Name for a custom database to create
+    ##
+    database: 'CHANGE_ME'
+    ## @param auth.existingSecret Name of existing secret to use for PostgreSQL credentials. `auth.postgresPassword`, `auth.password`, and `auth.replicationPassword` will be ignored and picked up from this secret. The secret might also contains the key `ldap-password` if LDAP is enabled. `ldap.bind_password` will be ignored and picked from this secret in this case.
+    ##
+    existingSecret: 'CHANGE_ME'
+    ## @param auth.secretKeys.adminPasswordKey Name of key in existing secret to use for PostgreSQL credentials. Only used when `auth.existingSecret` is set.
+    ## @param auth.secretKeys.userPasswordKey Name of key in existing secret to use for PostgreSQL credentials. Only used when `auth.existingSecret` is set.
+    ## @param auth.secretKeys.replicationPasswordKey Name of key in existing secret to use for PostgreSQL credentials. Only used when `auth.existingSecret` is set.
+    ##
+    secretKeys:
+      adminPasswordKey: CHANGE_ME
+      userPasswordKey: CHANGE_ME
+

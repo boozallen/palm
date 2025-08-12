@@ -1,0 +1,53 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Docker files
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# JS/Next.js files
+node_modules
+npm-debug.log
+.next
+dist
+coverage
+*.log
+yarn-error.log
+
+# Local configuration
+*.local
+.env*
+.vscode
+.idea
+
+# Documentation files
+catalog-info.yaml
+mkdocs.yml
+system.yaml
+README.md
+CHANGELOG.md
+docs/
+
+# Testing files
+test/
+tests/
+cypress/
+jest.config.*
+vitest.config.*
+
+# CI/CD files
+.github
+.gitlab-ci.yml
+circle.yml
+
+# DevPortal and GitOps
+apps/
+charts/
+kustomize/
+
+# Miscellaneous
+tmp/
+*.tmp
