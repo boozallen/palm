@@ -1,0 +1,202 @@
+apiVersion: apps/v1
+kind: DeploymentList
+items:
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: '{{ .Release.Name }}'
+      labels:
+        app.kubernetes.io/instance: '{{ .Release.Name }}'
+        app.kubernetes.io/managed-by: '{{ .Release.Service }}'
+        app.kubernetes.io/name: '{{ .Release.Name }}'
+        argocd.argoproj.io/instance: '{{ .Release.Name }}'
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/instance: '{{ .Release.Name }}'
+      template:
+        metadata:
+          labels:
+            app: '{{ .Release.Name }}'
+            app.kubernetes.io/instance: '{{ .Release.Name }}'
+            app.kubernetes.io/name: '{{ .Release.Name }}'
+        spec:
+          imagePullSecrets:
+            - name: '{{ .Values.dockerRegistry.secret }}'
+
+          volumes:
+            - name: '{{ .Release.Name }}-frontend-config-volume'
+              configMap:
+                name: '{{ .Release.Name }}-frontend-config-json'
+                items:
+                  - key: config.json
+                    path: config.json
+
+          containers:
+            - name: '{{ .Release.Name }}'
+              image: '{{ .Values.dockerRegistry.url }}/{{ .Values.image.name }}:{{ .Values.image.tag }}'
+              ports:
+                - containerPort: {{ .Values.port }}
+              env:
+
+                # Optional
+                - name: 'NODE_ENV'
+                  value: '{{ .Values.frontendConfig.nodeEnv }}'
+
+                # Optional
+                - name: 'LOG_LEVEL'
+                  value: '{{ .Values.frontendConfig.logLevel }}'
+
+                # Optional - AWS
+                - name: 'AWS_ACCESS_KEY_ID'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'aws-access-key-id'
+                      key: 'aws-access-key-id'
+
+                # Optional - AWS
+                - name: 'AWS_SECRET_ACCESS_KEY'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'aws-secret-access-key'
+                      key: 'aws-secret-access-key'
+
+                # Optional - AWS
+                - name: 'AWS_SESSION_TOKEN'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'aws-session-token'
+                      key: 'aws-session-token'
+
+                # Optional - AWS
+                - name: 'AWS_REGION'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'aws-region'
+                      key: 'aws-region'
+                      
+                # SSO via NextAuth.js - https://next-auth.js.org/deployment
+                #
+
+                # Required
+                - name: 'NEXTAUTH_URL'
+                  value: '{{ .Values.frontendConfig.nextAuthUrl }}'
+
+                # Required
+                - name: 'NEXTAUTH_SECRET'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'nextauth-secret'
+                      key: 'auth-secret'
+                
+                # Required
+                - name: 'ENABLED_NEXTAUTH_PROVIDERS'
+                  value: '{{ .Values.frontendConfig.enabledNextAuthProviders }}'
+
+                # Required
+                - name: 'ENABLE_SECURE_COOKIES'
+                  value: '{{ .Values.frontendConfig.enableSecureCookies }}'
+
+                # Optional - required for role inheritance
+                - name: 'INHERITED_OAUTH_ROLE_PATH'
+                  value: '{{ .Values.frontendConfig.inheritedOauthRolePath }}'
+
+                # Optional - AzureAD
+                - name: 'AZURE_AD_CLIENT_ID'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'azure-ad-client-secret'
+                      key: 'client-id'
+
+                # Optional - AzureAD
+                - name: 'AZURE_AD_CLIENT_SECRET'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'azure-ad-client-secret'
+                      key: 'client-secret'
+                
+                # Optional - AzureAD
+                - name: 'AZURE_AD_TENANT_ID'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'azure-ad-tenant-secret'
+                      key: 'tenant-id'
+
+                # Optional - Keycloak
+                - name: 'KEYCLOAK_ID'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'keycloak-id'
+                      key: 'keycloak-id'
+
+                # Optional - Keycloak
+                - name: 'KEYCLOAK_SECRET'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'keycloak-secret'
+                      key: 'keycloak-secret'
+                
+                # Optional - Keycloak
+                - name: 'KEYCLOAK_ISSUER'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'keycloak-issuer'
+                      key: 'keycloak-issuer'
+
+                # Optional - Redis Host
+                - name: 'REDIS_HOST'
+                  value: '{{ .Values.frontendConfig.redisHost }}'
+
+                # Optional - Redis Port
+                - name: 'REDIS_PORT'
+                  value: '{{ .Values.frontendConfig.redisPort }}'
+
+                # Optional - Redis Password
+                - name: 'REDIS_PASSWORD'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'redis-secret'
+                      key: 'password'
+
+                # Database Configuration
+                #
+
+                # Required for local development
+                - name: 'POSTGRES_DB'
+                  value: '{{ .Values.postgresql.auth.database }}'
+
+                # Required for local development
+                - name: 'POSTGRES_USER'
+                  value: '{{ .Values.postgresql.auth.username }}'
+
+                # Required for local development
+                - name: 'POSTGRES_PASSWORD'
+                  valueFrom:
+                    secretKeyRef:
+                      name: 'database-secret'
+                      key: 'db-password'
+
+                # Required. Needs a role with USAGE, SELECT, INSERT, UPDATE, DELETE permissions to the schema used by the application
+                - name: 'DATABASE_URL'
+                  value: '{{ .Values.frontendConfig.dbUrl }}'
+
+                # Required for running migrations. Needs a role with USAGE, CREATE, SELECT, INSERT, UPDATE, DELETE permissions to the schema used by the application
+                # The role will also need to be able to run `CREATE EXTENSION` commands; depending on the setup of the server this might be locked down to the super-user role only
+                - name: 'MIGRATION_DATABASE_URL'
+                  value: '{{ .Values.frontendConfig.migrationDbUrl }}'
+
+              volumeMounts:
+                - name: '{{ .Release.Name }}-frontend-config-volume'
+                  mountPath: /usr/share/nginx/html/config.json
+                  subPath: config.json
+
+          initContainers:
+            - name: 'wait-for-db'
+              image: 'node@sha256:9bf5846b28f63acab0ccb0a39a245fbc414e6b7ecd467282f58016537c06e159'
+              command:
+                - '/bin/bash'
+                - '-c'
+                - |
+                  npm install -g wait-on
+                  wait-on tcp:{{ .Values.env }}-palm-argo-app-postgresql:5432

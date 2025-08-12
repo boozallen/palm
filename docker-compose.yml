@@ -1,0 +1,77 @@
+services:
+  frontend:
+    container_name: frontend
+    hostname: frontend
+    build:
+      context: .
+      target: dev
+    #restart: always
+    command: yarn dev:docker
+    env_file: ./.env.local
+    environment:
+      - NODE_ENV=development
+    networks:
+      - palm-net
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - 3000:3000
+      - 5555:5555
+    depends_on:
+      - db
+      - redis
+  keycloak:
+    container_name: keycloak
+    hostname: keycloak
+    image: quay.io/keycloak/keycloak:18.0.2
+    env_file: ./.env.local
+    environment:
+      - NODE_ENV=development
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+    networks:
+      - palm-net
+    command: --verbose start-dev
+    ports:
+      - 8080:8080
+    depends_on:
+      - db
+  db:
+    container_name: db
+    hostname: db
+    image: ankane/pgvector:v0.5.1 # The official docker image of pgvector, which adds the vector extension to postgres. This version is built on top of postgres:15 (see: https://hub.docker.com/r/ankane/pgvector)
+    restart: always
+    ports:
+      - 5432:5432
+    networks:
+      - palm-net
+    env_file: ./.env.local
+    volumes:
+      - db-data:/var/lib/postgresql/data
+  kb:
+    hostname: kb
+    build:
+      context: ./docker/kb
+    env_file: ./.env.local
+    networks:
+      - palm-net
+    ports:
+      - 5000:5000
+    profiles:
+      - kb
+  redis:
+    container_name: redis
+    hostname: redis
+    image: redis:latest
+    networks:
+      - palm-net
+    ports:
+      - "6379:6379"
+
+networks:
+  palm-net:
+
+volumes:
+  db-data:

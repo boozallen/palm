@@ -1,0 +1,71 @@
+{
+  "extends": "next/core-web-vitals",
+  "plugins": [
+    "unused-imports"
+  ],
+  "rules": {
+    "keyword-spacing": [
+      "error"
+    ],
+    "curly": [
+      "error"
+    ],
+    "object-curly-spacing": [
+      "error",
+      "always"
+    ],
+    "semi": [
+      "error",
+      "always"
+    ],
+    "semi-style": [
+      "error",
+      "last"
+    ],
+    "semi-spacing": "error",
+    "space-in-parens": [
+      "error",
+      "never"
+    ],
+    "quotes": [
+      "error",
+      "single"
+    ],
+    "jsx-quotes": [
+      "error",
+      "prefer-single"
+    ],
+    "no-multiple-empty-lines": [
+      "error",
+      {
+        "max": 1,
+        "maxEOF": 1
+      }
+    ],
+    "switch-colon-spacing": [
+      "error",
+      {
+        "after": true,
+        "before": false
+      }
+    ],
+    "vars-on-top": "error",
+    "comma-dangle": [
+      "error",
+      "always-multiline"
+    ],
+    "react/jsx-uses-react": "error",
+    "react/jsx-uses-vars": "error",
+    "no-unused-vars": "off", // or "@typescript-eslint/no-unused-vars": "off",
+    "unused-imports/no-unused-imports": "error",
+    "unused-imports/no-unused-vars": [
+      "warn",
+      {
+        "vars": "all",
+        "varsIgnorePattern": "^_",
+        "args": "after-used",
+        "argsIgnorePattern": "^_"
+      }
+    ]
+  }
+}

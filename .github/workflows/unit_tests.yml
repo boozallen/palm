@@ -1,0 +1,42 @@
+name: Run Unit Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths-ignore:
+      - '.github/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Get node version
+        id: node
+        run: |
+          echo "::set-output name=version::$(node -v)"
+      - name: Get node_modules cache
+        uses: actions/cache@v3.0.2
+        id: node_modules
+        with:
+          path: |
+            **/node_modules
+          # Add node version as a cache key to avoid yarn recompilation for particular node as it doesn't change often
+          key: ${{ runner.os }}-node_modules-${{ hashFiles('**/yarn.lock') }}-${{ steps.node.outputs.version }}
+      - name: Install yarn
+        run: npm i -g yarn
+      - name: Install dependencies
+        run: yarn --frozen-lockfile
+      - name: Regenerate Prisma Client
+        run: yarn prisma generate
+      - name: Run tests
+        run: yarn test
+      - name: Run lint check
+        run: yarn lint
+      - name: Run tsc build check
+        run: yarn tsc-no-emit
