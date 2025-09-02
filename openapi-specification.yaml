@@ -1,0 +1,46 @@
+openapi: 3.0.0
+info:
+  title: "Prompt Library API"
+  version: "0.0.1"
+
+servers:
+  - url: /api
+
+paths:
+  /user-story:
+    post:
+      operationId: createUserStory
+      summary: This path will create a user story containing a value statement and acceptance criteria
+      tags:
+        - agile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ asA, iWant, soThat ]
+              additionalProperties: false
+              properties:
+                asA:
+                  type: string
+                iWant:
+                  type: string
+                soThat:
+                  type: string
+      responses:
+        200:
+          $ref: '#/components/responses/UserStoryResponse'
+
+components:
+  responses:
+    UserStoryResponse:
+      description: Successful user story generation
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ userStory ]
+            properties:
+              userStory:
+                type: string

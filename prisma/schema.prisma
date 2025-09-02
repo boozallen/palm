@@ -1,0 +1,421 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres", "postgresqlExtensions"]
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+model User {
+  id                       String                @id @default(uuid()) @db.Uuid
+  name                     String
+  hashedPassword           String?
+  email                    String?               @unique
+  emailVerified            DateTime?             @db.Timestamptz
+  image                    String?
+  createdAt                DateTime              @default(now()) @db.Timestamptz
+  updatedAt                DateTime              @updatedAt @db.Timestamptz
+  accounts                 Account[]
+  bookmarks                PromptBookmark[]
+  prompts                  Prompt[]
+  auditRecords             AuditRecord[]
+  role                     String                @default("User")
+  userGroupMemberhip       UserGroupMembership[]
+  AiProviderUsage          AiProviderUsage[]
+  Chat                     Chat[]
+  // Implicit M:M https://www.prisma.io/docs/orm/prisma-schema/data-model/relations/many-to-many-relations#implicit-many-to-many-relations
+  knowledgeBases           KnowledgeBase[]
+  knowledgeBasesMinScore   Float?
+  knowledgeBasesMaxResults Int?
+  lastLoginAt              DateTime?
+  documents                Document[]
+}
+
+model Account {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId             String   @db.Uuid
+  provider           String
+  type               String
+  providerAccountId  String
+  token_type         String
+  scope              String
+  expires_at         Int
+  ext_expires_in     Int?
+  refresh_expires_in Int?
+  refresh_token      String?  @db.Text
+  access_token       String
+  id_token           String
+  session_state      String
+  createdAt          DateTime @default(now()) @db.Timestamptz
+  updatedAt          DateTime @updatedAt @db.Timestamptz
+  user               User     @relation(fields: [userId], references: [id])
+
+  @@unique([provider, providerAccountId], name: "provider_providerAccountId")
+}
+
+model VerificationRequest {
+  id         String   @id @default(uuid()) @db.Uuid
+  identifier String
+  token      String   @unique
+  expires    DateTime @db.Timestamptz
+  createdAt  DateTime @default(now()) @db.Timestamptz
+  updatedAt  DateTime @updatedAt @db.Timestamptz
+
+  @@unique([identifier, token])
+}
+
+model Prompt {
+  id           String  @id @default(uuid()) @db.Uuid
+  slug         String? @unique
+  title        String
+  summary      String
+  description  String
+  instructions String
+  example      String
+
+  // config properties
+  model            String
+  randomness       Float
+  repetitiveness   Float
+  bestOf           Int?
+  frequencyPenalty Float?
+  presencePenalty  Float?
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+  creatorId String?  @db.Uuid
+  creator   User?    @relation(fields: [creatorId], references: [id])
+
+  tags      PromptTag[]
+  bookmarks PromptBookmark[]
+  Chat      Chat[]
+}
+
+model PromptTag {
+  prompt   Prompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  promptId String @db.Uuid
+  tag      String
+
+  @@id([promptId, tag])
+  @@index(tag)
+}
+
+model PromptBookmark {
+  user     User   @relation(fields: [userId], references: [id])
+  userId   String @db.Uuid
+  prompt   Prompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  promptId String @db.Uuid
+
+  @@id([userId, promptId])
+}
+
+model LogEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String
+  timestamp DateTime @default(now()) @db.Timestamptz
+  method    String
+  source    String
+  context   Json?
+  prompt    String
+  config    Json?
+  result    String?
+  error     String?
+}
+
+model AiProvider {
+  id                 String            @id @default(uuid()) @db.Uuid
+  label              String            @default("Unlabeled AI Provider")
+  aiProviderTypeId   Int // Represents the type of AI used by the provider
+  apiConfigType      Int
+  apiConfigId        String            @db.Uuid // Unenforced foreign key for API config
+  costPerInputToken  Float             @default(0)
+  costPerOutputToken Float             @default(0)
+  models             Model[]
+  userGroups         UserGroup[]
+  createdAt          DateTime          @default(now()) @db.Timestamptz
+  updatedAt          DateTime          @updatedAt @db.Timestamptz
+  deletedAt          DateTime?         @db.Timestamptz
+  AiProviderUsage    AiProviderUsage[]
+}
+
+model Model {
+  id                 String            @id @default(uuid()) @db.Uuid
+  name               String
+  externalId         String            @default("")
+  costPerInputToken  Float             @default(0)
+  costPerOutputToken Float             @default(0)
+  aiProviderId       String            @db.Uuid
+  aiProvider         AiProvider        @relation(fields: [aiProviderId], references: [id], onDelete: Cascade)
+  Chat               Chat[]
+  deletedAt          DateTime?         @db.Timestamptz
+  AiProviderUsage    AiProviderUsage[]
+  SystemConfig       SystemConfig[]    @relation("SystemAiProviderModel")
+
+  @@index(aiProviderId)
+}
+
+model ApiConfigOpenAi {
+  id        String    @id @default(uuid()) @db.Uuid
+  apiKey    String
+  orgKey    String
+  deletedAt DateTime? @db.Timestamptz
+}
+
+model ApiConfigAzureOpenAi {
+  id           String    @id @default(uuid()) @db.Uuid
+  apiKey       String
+  apiEndpoint  String
+  deploymentId String
+  deletedAt    DateTime? @db.Timestamptz
+}
+
+model ApiConfigAnthropic {
+  id        String    @id @default(uuid()) @db.Uuid
+  apiKey    String
+  deletedAt DateTime? @db.Timestamptz
+}
+
+model ApiConfigGemini {
+  id        String    @id @default(uuid()) @db.Uuid
+  apiKey    String
+  deletedAt DateTime? @db.Timestamptz
+}
+
+model ApiConfigBedrock {
+  id              String    @id @default(uuid()) @db.Uuid
+  accessKeyId     String
+  secretAccessKey String
+  sessionToken    String
+  region          String
+  deletedAt       DateTime? @db.Timestamptz
+}
+
+model KbProvider {
+  id             String          @id @default(uuid()) @db.Uuid
+  label          String
+  config         Json
+  kbProviderType Int
+  knowledgeBases KnowledgeBase[]
+  userGroups     UserGroup[]
+  createdAt      DateTime        @default(now()) @db.Timestamptz
+  updatedAt      DateTime        @updatedAt @db.Timestamptz
+  deletedAt      DateTime?       @db.Timestamptz
+}
+
+model KnowledgeBase {
+  id                   String                @id @default(uuid()) @db.Uuid
+  label                String
+  externalId           String
+  kbProviderId         String                @db.Uuid
+  kbProvider           KbProvider            @relation(fields: [kbProviderId], references: [id])
+  users                User[]
+  createdAt            DateTime              @default(now()) @db.Timestamptz
+  updatedAt            DateTime              @updatedAt @db.Timestamptz
+  deletedAt            DateTime?             @db.Timestamptz
+  chatMessageCitations ChatMessageCitation[]
+
+  @@index([kbProviderId])
+}
+
+model UserGroup {
+  id                   String                @id @default(uuid()) @db.Uuid
+  label                String                @unique
+  joinCode             String?               @unique
+  kbProviders          KbProvider[]
+  aiProviders          AiProvider[]
+  aiAgents             AiAgent[]
+  userGroupMemberships UserGroupMembership[]
+  defaultForSystem     SystemConfig?         @relation("DefaultUserGroup")
+  createdAt            DateTime              @default(now()) @db.Timestamptz
+  updatedAt            DateTime              @updatedAt @db.Timestamptz
+}
+
+model UserGroupMembership {
+  userGroup   UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  userGroupId String    @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String    @db.Uuid
+  role        String
+
+  @@id([userGroupId, userId])
+}
+
+model AiProviderUsage {
+  id                 String     @id @default(uuid()) @db.Uuid
+  timestamp          DateTime   @default(now()) @db.Timestamptz
+  user               User       @relation(fields: [userId], references: [id])
+  userId             String     @db.Uuid
+  aiProvider         AiProvider @relation(fields: [aiProviderId], references: [id])
+  aiProviderId       String     @db.Uuid
+  model              Model      @relation(fields: [modelId], references: [id])
+  modelId            String     @db.Uuid
+  inputTokensUsed    Float      @default(0)
+  costPerInputToken  Float      @default(0) // To be copied over from AiProvider's costPerInputToken
+  outputTokensUsed   Float      @default(0)
+  costPerOutputToken Float      @default(0) // To be copied over from AiProvider's costPerOutputToken
+  system             Boolean    @default(false)
+}
+
+// Chat is a conversation model
+// This model is the replacement for UserChatConversation
+model Chat {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @db.Uuid
+  modelId   String?       @db.Uuid
+  promptId  String?       @db.Uuid
+  summary   String?
+  createdAt DateTime      @default(now()) @db.Timestamptz
+  updatedAt DateTime      @default(now()) @updatedAt @db.Timestamptz
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  model     Model?        @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  prompt    Prompt?       @relation(fields: [promptId], references: [id], onDelete: SetNull)
+  messages  ChatMessage[]
+
+  @@index([userId, createdAt])
+  @@index(modelId)
+  @@index(promptId)
+}
+
+// ChatMessage is a message model
+model ChatMessage {
+  id                   String                @id @default(uuid()) @db.Uuid
+  chatId               String                @db.Uuid
+  role                 String
+  content              String
+  createdAt            DateTime              @default(now()) @db.Timestamptz
+  updatedAt            DateTime              @default(now()) @updatedAt @db.Timestamptz
+  chat                 Chat                  @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  chatMessageCitations ChatMessageCitation[]
+  chatArtifacts        ChatArtifact[]
+  chatMessageFollowUp  ChatMessageFollowUp[]
+
+  @@index([chatId, createdAt])
+}
+
+model ChatMessageCitation {
+  id              String         @id @default(uuid()) @db.Uuid
+  citation        String
+  chatMessageId   String         @db.Uuid
+  knowledgeBaseId String?        @db.Uuid
+  documentId      String?        @db.Uuid
+  message         ChatMessage    @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+  knowledgeBase   KnowledgeBase? @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  document        Document?      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+model ChatMessageFollowUp {
+  id            String      @id @default(uuid()) @db.Uuid
+  chatMessageId String      @db.Uuid
+  content       String
+  message       ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now()) @db.Timestamptz
+  updatedAt     DateTime    @updatedAt @db.Timestamptz
+}
+
+model ChatArtifact {
+  id            String      @id @default(uuid()) @db.Uuid
+  fileExtension String
+  label         String
+  content       String
+  chatMessageId String      @db.Uuid
+  message       ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now()) @db.Timestamptz
+}
+
+model SystemConfig {
+  id                                      String                  @id @default(uuid()) @db.Uuid
+  systemMessage                           String                  @default("Persona: You are a helpful assistant.")
+  termsOfUseHeader                        String                  @default("Generative AI Use Acknowledgment")
+  termsOfUseBody                          String                  @default("Please be aware that it is crucial to only utilize non-sensitive information when using AI-powered applications such as PALM. Users are fully responsible for all application usage and the data shared when using features that send such data to third-party APIs (AI providers). Do not input any sensitive or classified data. If you are unsure whether data is sensitive or classified, consult your organization's policies before proceeding.")
+  termsOfUseCheckboxLabel                 String                  @default("I agree to the terms of use")
+  legalPolicyHeader                       String                  @default("Legal Policy")
+  legalPolicyBody                         String                  @default("All Rights Reserved.")
+  defaultUserGroupId                      String?                 @unique @db.Uuid
+  defaultUserGroup                        UserGroup?              @relation("DefaultUserGroup", fields: [defaultUserGroupId], references: [id], onDelete: SetNull)
+  systemAiProviderModelId                 String?                 @db.Uuid
+  systemAiProviderModel                   Model?                  @relation("SystemAiProviderModel", fields: [systemAiProviderModelId], references: [id], onDelete: SetNull)
+  featureManagementPromptGenerator        Boolean                 @default(true)
+  featureManagementChatSummarization      Boolean                 @default(true)
+  featureManagementPromptTagSuggestions   Boolean                 @default(true)
+  documentLibraryDocumentUploadProviderId String?                 @unique @db.Uuid
+  documentLibraryDocumentUploadProvider   DocumentUploadProvider? @relation("DocumentLibraryDocumentUploadProvider", fields: [documentLibraryDocumentUploadProviderId], references: [id])
+  createdAt                               DateTime                @default(now()) @db.Timestamptz
+  updatedAt                               DateTime                @updatedAt @db.Timestamptz
+}
+
+model AuditRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  userId      String?  @db.Uuid
+  referer     String?
+  outcome     String
+  description String
+  event       String   @default("")
+  timestamp   DateTime @default(now()) @db.Timestamptz
+}
+
+model AiAgent {
+  id          String             @id @default(uuid()) @db.Uuid
+  name        String
+  description String
+  agentType   Int                @default(1)
+  userGroups  UserGroup[]
+  policies    AgentCertaPolicy[]
+  createdAt   DateTime           @default(now()) @db.Timestamptz
+  updatedAt   DateTime           @updatedAt @db.Timestamptz
+}
+
+model AgentCertaPolicy {
+  id           String   @id @default(uuid()) @db.Uuid
+  title        String   @unique
+  content      String
+  requirements String
+  aiAgent      AiAgent  @relation(fields: [aiAgentId], references: [id], onDelete: Cascade)
+  aiAgentId    String   @db.Uuid
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+}
+
+model DocumentUploadProvider {
+  id           String        @id @default(uuid()) @db.Uuid
+  label        String
+  type         Int
+  config       Json
+  createdAt    DateTime      @default(now()) @db.Timestamptz
+  updatedAt    DateTime      @updatedAt @db.Timestamptz
+  deletedAt    DateTime?     @db.Timestamptz
+  documents    Document[]
+  SystemConfig SystemConfig? @relation("DocumentLibraryDocumentUploadProvider")
+}
+
+model Document {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  filename                 String
+  createdAt                DateTime               @default(now()) @db.Timestamptz
+  uploadStatus             String
+  user                     User                   @relation(fields: [userId], references: [id])
+  userId                   String                 @db.Uuid
+  embeddings               Embedding[]
+  documentUploadProvider   DocumentUploadProvider @relation(fields: [documentUploadProviderId], references: [id])
+  documentUploadProviderId String                 @db.Uuid
+  chatMessageCitations     ChatMessageCitation[]
+}
+
+model Embedding {
+  id         String                      @id @default(uuid()) @db.Uuid
+  embedding  Unsupported("vector(1536)")
+  content    String
+  contentNum Int
+  createdAt  DateTime                    @default(now()) @db.Timestamptz
+  documentId String                      @db.Uuid
+  document   Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, contentNum])
+}
