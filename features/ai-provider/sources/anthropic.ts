@@ -32,6 +32,7 @@ export class AnthropicSource implements AiRepository {
       const response = await this.api.messages.create({
         model: config.model,
         max_tokens: this.maxTokensPerRequest,
+        temperature: config.randomness,
         messages: [
           { 'role': 'user', 'content': prompt },
         ],
@@ -75,6 +76,7 @@ export class AnthropicSource implements AiRepository {
       const response = await this.api.messages.create({
         model: config.model,
         max_tokens: this.maxTokensPerRequest,
+        temperature: config.randomness,
         system: systemMessage,
         messages: chatMessages,
       });
