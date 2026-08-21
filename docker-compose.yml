@@ -1,0 +1,193 @@
+services:
+  frontend:
+    container_name: frontend
+    hostname: frontend
+    build:
+      context: .
+      target: dev
+    #restart: always
+    command: yarn dev:docker
+    env_file: ./.env.local
+    environment:
+      - NODE_ENV=development
+    networks:
+      - palm-net
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+      - ~/.ssh:/root/.ssh:ro
+    ports:
+      - 3000:3000
+      - 5555:5555
+    depends_on:
+      - db
+      - redis
+  keycloak:
+    container_name: keycloak
+    hostname: keycloak
+    image: quay.io/keycloak/keycloak:18.0.2
+    env_file: ./.env.local
+    environment:
+      - NODE_ENV=development
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+    networks:
+      - palm-net
+    command: --verbose start-dev
+    ports:
+      - 8080:8080
+    depends_on:
+      - db
+  db:
+    container_name: db
+    hostname: db
+    image: ankane/pgvector:v0.5.1 # The official docker image of pgvector, which adds the vector extension to postgres. This version is built on top of postgres:15 (see: https://hub.docker.com/r/ankane/pgvector)
+    restart: always
+    ports:
+      - 5432:5432
+    networks:
+      - palm-net
+    env_file: ./.env.local
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  kb:
+    hostname: kb
+    build:
+      context: ./docker/kb
+    env_file: ./.env.local
+    networks:
+      - palm-net
+    ports:
+      - 5000:5000
+    profiles:
+      - kb
+  langgraph-service:
+    hostname: langgraph-service
+    build:
+      context: .
+      dockerfile: docker/langgraph-service/Dockerfile
+    restart: always
+    env_file: ./.env.local
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    networks:
+      - palm-net
+    ports:
+      - 8001:8000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  claude-service:
+    hostname: claude-service
+    build:
+      context: .
+      dockerfile: docker/claude-service/Dockerfile
+    restart: always
+    env_file: ./.env.local
+    environment:
+      - ANTHROPIC_BASE_URL=http://frontend:3000/api/internal
+    volumes:
+      - repo-service-data:/repos:ro
+    networks:
+      - palm-net
+    ports:
+      - 8002:8000
+    depends_on:
+      - frontend
+
+  repo-service:
+    hostname: repo-service
+    build:
+      context: .
+      dockerfile: docker/repo-service/Dockerfile
+    restart: always
+    env_file: ./.env.local
+    volumes:
+      # Persist cloned repos across restarts
+      - repo-service-data:/repos
+    networks:
+      - palm-net
+    ports:
+      - 8003:8002
+
+  document-upload-worker:
+    hostname: document-upload-worker
+    build:
+      context: .
+      dockerfile: ./docker/document-upload-worker/Dockerfile
+    restart: always
+    env_file: ./.env.local
+    networks:
+      - palm-net
+    depends_on:
+      - db
+      - redis
+  graph-build-worker:
+    hostname: graph-build-worker
+    build:
+      context: .
+      dockerfile: ./docker/graph-build-worker/Dockerfile
+    restart: always
+    env_file: ./.env.local
+    networks:
+      - palm-net
+    depends_on:
+      - db
+      - redis
+      - neo4j
+  video-render-worker:
+    hostname: video-render-worker
+    build:
+      context: .
+      dockerfile: ./docker/video-render-worker/Dockerfile
+    restart: always
+    env_file: ./.env.local
+    networks:
+      - palm-net
+    depends_on:
+      - db
+      - redis
+  redis:
+    container_name: redis
+    hostname: redis
+    image: redis:latest
+    networks:
+      - palm-net
+    ports:
+      - "6379:6379"
+  neo4j:
+    container_name: neo4j
+    hostname: neo4j
+    image: neo4j:5.15.0
+    restart: always
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    networks:
+      - palm-net
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=2G
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+      - neo4j-plugins:/plugins
+
+networks:
+  palm-net:
+
+volumes:
+  db-data:
+  neo4j-data:
+  neo4j-logs:
+  neo4j-plugins:
+  repo-service-data:

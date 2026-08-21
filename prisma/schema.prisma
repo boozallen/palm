@@ -1,0 +1,1106 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres", "postgresqlExtensions"]
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+model User {
+  id                       String                   @id @default(uuid()) @db.Uuid
+  name                     String
+  hashedPassword           String?
+  email                    String?                  @unique
+  emailVerified            DateTime?                @db.Timestamptz(6)
+  image                    String?
+  createdAt                DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime                 @updatedAt @db.Timestamptz(6)
+  role                     String                   @default("User")
+  knowledgeBasesMinScore   Float?
+  knowledgeBasesMaxResults Int?
+  lastLoginAt              DateTime?
+  accounts                 Account[]
+  odramJobs                AgentOdramJob[]
+  prismJobs                AgentPrismJob[]
+  AiProviderUsage          AiProviderUsage[]
+  auditRecords             AuditRecord[]
+  Chat                     Chat[]
+  documents                Document[]
+  prompts                  Prompt[]
+  bookmarks                PromptBookmark[]
+  userGroupMemberhip       UserGroupMembership[]
+  workflows                Workflow[]
+  workflowExecutions       WorkflowExecution[]
+  agentThreads             AgentThread[]
+  documentResolutionPairs  DocumentResolutionPair[]
+  graphBuildRuns           GraphBuildRun[]
+  chatMessageSearches      ChatMessageSearch[]
+  graphConceptEmbeddings   GraphConceptEmbedding[]  @relation("UserGraphConcepts")
+  graphEntityEmbeddings    GraphEntityEmbedding[]   @relation("UserGraphEntities")
+  graphMetadata            GraphMetadata[]
+  marginAnalyses           MarginAnalysis[]
+  rateCards                RateCard[]
+  sharedDocumentActions    SharedDocumentAction[]   @relation("SharedDocumentActions")
+  sharedDocumentsCreated   SharedDocument[]         @relation("SharedDocumentsCreated")
+  sharedWorkflowActions    SharedWorkflowAction[]   @relation("SharedWorkflowActions")
+  sharedWorkflowsCreated   SharedWorkflow[]         @relation("SharedWorkflowsCreated")
+  adminDocuments           Document[]               @relation("AdminDocumentAccess")
+  knowledgeBases           KnowledgeBase[]          @relation("KnowledgeBaseToUser")
+  documentCollections      DocumentCollection[]     @relation("UserDocumentCollections")
+}
+
+model Account {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId             String   @db.Uuid
+  provider           String
+  type               String
+  providerAccountId  String
+  token_type         String
+  scope              String
+  expires_at         Int
+  ext_expires_in     Int?
+  refresh_expires_in Int?
+  refresh_token      String?
+  access_token       String
+  id_token           String
+  session_state      String
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+  user               User     @relation(fields: [userId], references: [id])
+
+  @@unique([provider, providerAccountId], name: "provider_providerAccountId")
+  @@index([userId, updatedAt])
+}
+
+model VerificationRequest {
+  id         String   @id @default(uuid()) @db.Uuid
+  identifier String
+  token      String   @unique
+  expires    DateTime @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([identifier, token])
+}
+
+model Prompt {
+  id               String           @id @default(uuid()) @db.Uuid
+  slug             String?          @unique
+  title            String
+  summary          String
+  description      String
+  instructions     String
+  example          String
+  model            String
+  temperature      Float
+  topP             Float
+  frequencyPenalty Float?
+  presencePenalty  Float?
+  createdAt        DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(6)
+  creatorId        String?          @db.Uuid
+  workflows        Boolean          @default(false)
+  Chat             Chat[]
+  creator          User?            @relation(fields: [creatorId], references: [id])
+  bookmarks        PromptBookmark[]
+  tags             PromptTag[]
+}
+
+model PromptTag {
+  promptId String @db.Uuid
+  tag      String
+  prompt   Prompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
+  @@id([promptId, tag])
+  @@index([tag])
+}
+
+model PromptBookmark {
+  userId   String @db.Uuid
+  promptId String @db.Uuid
+  prompt   Prompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  user     User   @relation(fields: [userId], references: [id])
+
+  @@id([userId, promptId])
+}
+
+model LogEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String
+  timestamp DateTime @default(now()) @db.Timestamptz(6)
+  method    String
+  source    String
+  context   Json?
+  prompt    String
+  config    Json?
+  result    String?
+  error     String?
+}
+
+model AiProvider {
+  id                 String            @id @default(uuid()) @db.Uuid
+  label              String            @default("Unlabeled AI Provider")
+  aiProviderTypeId   Int
+  apiConfigType      Int
+  apiConfigId        String            @db.Uuid
+  costPerInputToken  Float             @default(0)
+  costPerOutputToken Float             @default(0)
+  createdAt          DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime          @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?         @db.Timestamptz(6)
+  AiProviderUsage    AiProviderUsage[]
+  models             Model[]
+  userGroups         UserGroup[]       @relation("AiProviderToUserGroup")
+}
+
+model Model {
+  id                   String            @id @default(uuid()) @db.Uuid
+  name                 String
+  externalId           String            @default("")
+  costPerInputToken    Float             @default(0)
+  costPerOutputToken   Float             @default(0)
+  embeddingsOnly       Boolean           @default(false)
+  aiProviderId         String            @db.Uuid
+  deletedAt            DateTime?         @db.Timestamptz(6)
+  AiProviderUsage      AiProviderUsage[]
+  Chat                 Chat[]
+  aiProvider           AiProvider        @relation(fields: [aiProviderId], references: [id], onDelete: Cascade)
+  KnowledgeGraphConfig SystemConfig[]    @relation("KnowledgeGraphAiProviderModel")
+  SystemConfig         SystemConfig[]    @relation("SystemAiProviderModel")
+
+  @@index([aiProviderId])
+}
+
+model ApiConfigOpenAi {
+  id        String    @id @default(uuid()) @db.Uuid
+  apiKey    String
+  orgKey    String
+  deletedAt DateTime? @db.Timestamptz(6)
+}
+
+model ApiConfigAzureOpenAi {
+  id           String    @id @default(uuid()) @db.Uuid
+  apiKey       String
+  apiEndpoint  String
+  deploymentId String
+  deletedAt    DateTime? @db.Timestamptz(6)
+}
+
+model ApiConfigAnthropic {
+  id        String    @id @default(uuid()) @db.Uuid
+  apiKey    String
+  deletedAt DateTime? @db.Timestamptz(6)
+}
+
+model ApiConfigGemini {
+  id        String    @id @default(uuid()) @db.Uuid
+  apiKey    String
+  deletedAt DateTime? @db.Timestamptz(6)
+}
+
+model ApiConfigBedrock {
+  id              String    @id @default(uuid()) @db.Uuid
+  accessKeyId     String
+  secretAccessKey String
+  sessionToken    String
+  region          String
+  deletedAt       DateTime? @db.Timestamptz(6)
+}
+
+model KbProvider {
+  id             String          @id @default(uuid()) @db.Uuid
+  label          String
+  config         Json
+  kbProviderType Int
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime?       @db.Timestamptz(6)
+  knowledgeBases KnowledgeBase[]
+  userGroups     UserGroup[]     @relation("KbProviderToUserGroup")
+}
+
+model KnowledgeBase {
+  id                   String                @id @default(uuid()) @db.Uuid
+  label                String
+  externalId           String
+  kbProviderId         String                @db.Uuid
+  createdAt            DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime              @updatedAt @db.Timestamptz(6)
+  deletedAt            DateTime?             @db.Timestamptz(6)
+  chatMessageCitations ChatMessageCitation[]
+  kbProvider           KbProvider            @relation(fields: [kbProviderId], references: [id])
+  users                User[]                @relation("KnowledgeBaseToUser")
+
+  @@index([kbProviderId])
+}
+
+model UserGroup {
+  id                   String                @id @default(uuid()) @db.Uuid
+  label                String                @unique
+  joinCode             String?               @unique
+  createdAt            DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime              @updatedAt @db.Timestamptz(6)
+  graphDatabaseEnabled Boolean               @default(false)
+  workflowsEnabled     Boolean               @default(false)
+  contextStudioEnabled Boolean               @default(false)
+  agenticChatEnabled   Boolean               @default(false)
+  defaultForSystem     SystemConfig?         @relation("DefaultUserGroup")
+  userGroupMemberships UserGroupMembership[]
+  adminDocumentGroups  AdminDocumentGroup[]
+  agentProviders       AgentProvider[]       @relation("AgentProviderToUserGroup")
+  aiAgents             AiAgent[]             @relation("AiAgentToUserGroup")
+  aiProviders          AiProvider[]          @relation("AiProviderToUserGroup")
+  githubProviders      GitHubProvider[]      @relation("GitHubProviderToUserGroup")
+  kbProviders          KbProvider[]          @relation("KbProviderToUserGroup")
+  workflows            Workflow[]            @relation("UserGroupToWorkflow")
+  artifactTemplates    ArtifactTemplate[]    @relation("ArtifactTemplateToUserGroup")
+}
+
+model UserGroupMembership {
+  userGroupId String    @db.Uuid
+  userId      String    @db.Uuid
+  role        String
+  userGroup   UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userGroupId, userId])
+}
+
+model AgentProvider {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String      @default("")
+  endpoint    String
+  apiKey      String?
+  createdAt   DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime?   @db.Timestamptz(6)
+  chats       Chat[]
+  userGroups  UserGroup[] @relation("AgentProviderToUserGroup")
+}
+
+model GitHubProvider {
+  id                           String      @id @default(uuid()) @db.Uuid
+  label                        String
+  accessToken                  String
+  apiBaseUrl                   String      @default("https://api.github.com")
+  owner                        String
+  repo                         String
+  description                  String      @default("")
+  createdAt                    DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt                    DateTime    @updatedAt @db.Timestamptz(6)
+  deletedAt                    DateTime?   @db.Timestamptz(6)
+  // Skill repo configuration (optional — marks this provider as an agent-accessible knowledge base)
+  isSkillRepo              Boolean     @default(false)
+  skillRepoBranch          String?
+  skillRepoServiceUrl      String?
+  skillRepoRefreshMinutes  Int?        @default(15)
+  skillRepoLastSyncAt      DateTime?   @db.Timestamptz(6)
+  skillRepoLastSyncCommit  String?
+  userGroups                   UserGroup[] @relation("GitHubProviderToUserGroup")
+}
+
+model AiProviderUsage {
+  id                 String      @id @default(uuid()) @db.Uuid
+  timestamp          DateTime    @default(now()) @db.Timestamptz(6)
+  userId             String      @db.Uuid
+  aiProviderId       String      @db.Uuid
+  modelId            String      @db.Uuid
+  inputTokensUsed    Float       @default(0)
+  costPerInputToken  Float       @default(0)
+  outputTokensUsed   Float       @default(0)
+  costPerOutputToken Float       @default(0)
+  system             Boolean     @default(false)
+  agent              Boolean     @default(false)
+  knowledgeGraph     Boolean     @default(false)
+  embedding          Boolean     @default(false)
+  chatMessageId       String?            @db.Uuid
+  workflowExecutionId String?            @db.Uuid
+  primitiveId         String?
+  stepLabel           String?
+  documentId          String?            @db.Uuid
+  aiProvider          AiProvider         @relation(fields: [aiProviderId], references: [id])
+  model               Model              @relation(fields: [modelId], references: [id])
+  user                User               @relation(fields: [userId], references: [id])
+  workflowExecution   WorkflowExecution? @relation(fields: [workflowExecutionId], references: [id], onDelete: SetNull)
+  document            Document?          @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([chatMessageId])
+  @@index([workflowExecutionId])
+  @@index([documentId])
+}
+
+model Chat {
+  id                String         @id @default(uuid()) @db.Uuid
+  userId            String         @db.Uuid
+  modelId           String?        @db.Uuid
+  promptId          String?        @db.Uuid
+  summary           String?
+  createdAt         DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
+  externalSessionId String?
+  agentProviderId   String?        @db.Uuid
+  agentProvider     AgentProvider? @relation(fields: [agentProviderId], references: [id])
+  model             Model?         @relation(fields: [modelId], references: [id])
+  prompt            Prompt?        @relation(fields: [promptId], references: [id])
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages          ChatMessage[]
+
+  @@index([userId, createdAt])
+  @@index([modelId])
+  @@index([promptId])
+  @@index([agentProviderId])
+}
+
+model ChatMessage {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  chatId                 String                  @db.Uuid
+  role                   String
+  content                String
+  createdAt              DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime                @default(now()) @updatedAt @db.Timestamptz(6)
+  deepResearch           Boolean                 @default(false)
+  deepResearchJobId      String?
+  deepResearchStatus     String?
+  asyncChatJobId         String?
+  asyncChatStatus        String?
+  progressMessages       Json?
+  documentIds            String[]                @default([]) @db.Uuid
+  chatArtifacts          ChatArtifact[]
+  chat                   Chat                    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  chatMessageCitations   ChatMessageCitation[]
+  chatMessageFollowUp    ChatMessageFollowUp[]
+  chatMessageUserChoices ChatMessageUserChoice[]
+  graphSearchResult      GraphSearchResult?
+  graphSnapshot          GraphSnapshot?
+  chatMessageSearch      ChatMessageSearch?
+
+  @@index([chatId, createdAt])
+}
+
+model ChatMessageSearch {
+  messageId  String                   @id @db.Uuid
+  userId     String                   @db.Uuid
+  embedding  Unsupported("vector")?
+  textSearch Unsupported("tsvector")?
+  createdAt  DateTime                 @default(now()) @db.Timestamptz(6)
+  message    ChatMessage              @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("chat_message_search")
+}
+
+model ChatMessageCitation {
+  id              String                 @id @default(uuid()) @db.Uuid
+  citation        String
+  chatMessageId   String                 @db.Uuid
+  knowledgeBaseId String?                @db.Uuid
+  documentId      String?                @db.Uuid
+  embeddingId     String?                @db.Uuid
+  graphEntityId   String?                @db.Uuid
+  graphConceptId  String?                @db.Uuid
+  message         ChatMessage            @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+  document        Document?              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  embedding       Embedding?             @relation(fields: [embeddingId], references: [id], onDelete: Cascade)
+  graphConcept    GraphConceptEmbedding? @relation(fields: [graphConceptId], references: [id], onDelete: Cascade)
+  graphEntity     GraphEntityEmbedding?  @relation(fields: [graphEntityId], references: [id], onDelete: Cascade)
+  knowledgeBase   KnowledgeBase?         @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+}
+
+model ChatMessageFollowUp {
+  id            String      @id @default(uuid()) @db.Uuid
+  chatMessageId String      @db.Uuid
+  content       String
+  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime    @updatedAt @db.Timestamptz(6)
+  message       ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+}
+
+model ChatMessageUserChoice {
+  id            String      @id @default(uuid()) @db.Uuid
+  chatMessageId String      @db.Uuid
+  label         String
+  value         String
+  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime    @updatedAt @db.Timestamptz(6)
+  message       ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+}
+
+model ChatArtifact {
+  id             String      @id @default(uuid()) @db.Uuid
+  fileExtension  String
+  label          String
+  content        String
+  chatMessageId  String      @db.Uuid
+  createdAt      DateTime    @default(now()) @db.Timestamptz(6)
+  githubPagesUrl String?
+  githubUrl      String?
+  binaryContent  Bytes?
+  sourceScript   String?
+  sourceJson     Json?
+  message        ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+}
+
+model GraphSearchResult {
+  id            String      @id @default(uuid()) @db.Uuid
+  label         String
+  data          Json
+  chatMessageId String      @unique @db.Uuid
+  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+  message       ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+}
+
+model GraphSnapshot {
+  id            String      @id @default(uuid()) @db.Uuid
+  chatMessageId String      @unique @db.Uuid
+  nodeIds       String[]
+  documentIds   String[]
+  positions     Json?
+  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+  message       ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+}
+
+model SystemConfig {
+  id                                      String                  @id @default(uuid()) @db.Uuid
+  systemMessage                           String                  @default("Persona: You are a helpful assistant.")
+  termsOfUseHeader                        String                  @default("Generative AI Use Acknowledgment")
+  termsOfUseBody                          String                  @default("Please be aware that it is crucial to only utilize non-sensitive information when using AI-powered applications such as PALM. Users are fully responsible for all application usage and the data shared when using features that send such data to third-party APIs (AI providers). Do not input any sensitive or classified data. If you are unsure whether data is sensitive or classified, consult your organization's policies before proceeding.")
+  termsOfUseCheckboxLabel                 String                  @default("I agree to the terms of use")
+  legalPolicyHeader                       String                  @default("Legal Policy")
+  legalPolicyBody                         String                  @default("All Rights Reserved.")
+  joinUserGroupDialogExternalLink         String                  @default("")
+  defaultUserGroupId                      String?                 @unique @db.Uuid
+  systemAiProviderModelId                 String?                 @db.Uuid
+  featureManagementPromptGenerator        Boolean                 @default(true)
+  featureManagementChatSummarization      Boolean                 @default(true)
+  featureManagementPromptTagSuggestions   Boolean                 @default(true)
+  createdAt                               DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt                               DateTime                @updatedAt @db.Timestamptz(6)
+  documentLibraryDocumentUploadProviderId String?                 @unique @db.Uuid
+  knowledgeGraphAiProviderModelId         String?                 @db.Uuid
+  documentLibraryDataSharingEnabled       Boolean                 @default(false)
+  knowledgeGraphEntityResolutionEnabled   Boolean                 @default(false)
+  memoryEnabled                           Boolean                 @default(false)
+  defaultUserGroup                        UserGroup?              @relation("DefaultUserGroup", fields: [defaultUserGroupId], references: [id])
+  documentLibraryDocumentUploadProvider   DocumentUploadProvider? @relation("DocumentLibraryDocumentUploadProvider", fields: [documentLibraryDocumentUploadProviderId], references: [id])
+  knowledgeGraphAiProviderModel           Model?                  @relation("KnowledgeGraphAiProviderModel", fields: [knowledgeGraphAiProviderModelId], references: [id])
+  systemAiProviderModel                   Model?                  @relation("SystemAiProviderModel", fields: [systemAiProviderModelId], references: [id])
+}
+
+model AuditRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String?  @db.Uuid
+  referer     String?
+  outcome     String
+  description String
+  event       String   @default("")
+  timestamp   DateTime @default(now()) @db.Timestamptz(6)
+  // Queryable context for the audited action: which resource was acted on, and
+  // where it lived. A denormalized snapshot rather than a foreign key, because
+  // audit records outlive their resources (artifacts cascade-delete with chats).
+  metadata    Json?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([event, outcome, timestamp])
+  @@index([event, outcome, userId, timestamp])
+}
+
+model AiAgent {
+  id                  String                    @id @default(uuid()) @db.Uuid
+  name                String
+  description         String
+  createdAt           DateTime                  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime                  @updatedAt @db.Timestamptz(6)
+  agentType           Int                       @default(1)
+  policies            AgentCertaPolicy[]
+  odramJobs           AgentOdramJob[]
+  prismJobs           AgentPrismJob[]
+  swearChecklistItems AgentSwearChecklistItem[]
+  laborCategories     LaborCategory[]
+  marginAnalyses      MarginAnalysis[]
+  rateCards           RateCard[]
+  userGroups          UserGroup[]               @relation("AiAgentToUserGroup")
+}
+
+model AgentCertaPolicy {
+  id           String   @id @default(uuid()) @db.Uuid
+  title        String   @unique
+  content      String
+  requirements String
+  aiAgentId    String   @db.Uuid
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+  aiAgent      AiAgent  @relation(fields: [aiAgentId], references: [id], onDelete: Cascade)
+}
+
+model AgentSwearChecklistItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  category  String
+  item      String
+  sortOrder Int
+  aiAgentId String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  aiAgent   AiAgent  @relation(fields: [aiAgentId], references: [id], onDelete: Cascade)
+
+  @@unique([aiAgentId, category, item])
+}
+
+model AgentPrismJob {
+  id                   String             @id @default(uuid()) @db.Uuid
+  aiAgentId            String             @db.Uuid
+  userId               String             @db.Uuid
+  status               String
+  requirementsFilename String
+  proposalFilename     String
+  createdAt            DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime           @updatedAt @db.Timestamptz(6)
+  aiAgent              AiAgent            @relation(fields: [aiAgentId], references: [id], onDelete: Cascade)
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  results              AgentPrismResult[]
+}
+
+model AgentPrismResult {
+  id               String        @id @default(uuid()) @db.Uuid
+  jobId            String        @db.Uuid
+  category         String?
+  requirement      String
+  complianceStatus String
+  reasoning        String
+  citations        String?
+  sortOrder        Int
+  createdAt        DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(6)
+  job              AgentPrismJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model AgentOdramJob {
+  id            String             @id @default(uuid()) @db.Uuid
+  aiAgentId     String             @db.Uuid
+  userId        String             @db.Uuid
+  status        String
+  odramFilename String
+  summary       String?
+  createdAt     DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime           @updatedAt @db.Timestamptz(6)
+  aiAgent       AiAgent            @relation(fields: [aiAgentId], references: [id], onDelete: Cascade)
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  results       AgentOdramResult[]
+}
+
+model AgentOdramResult {
+  id                String        @id @default(uuid()) @db.Uuid
+  jobId             String        @db.Uuid
+  questionId        Int
+  questionName      String
+  teamRating        String
+  independentRating String
+  overallAssessment String
+  keyFeedback       String
+  sortOrder         Int
+  createdAt         DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(6)
+  job               AgentOdramJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model DocumentUploadProvider {
+  id           String        @id @default(uuid()) @db.Uuid
+  label        String
+  config       Json
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
+  deletedAt    DateTime?     @db.Timestamptz(6)
+  type         Int
+  documents    Document[]
+  SystemConfig SystemConfig? @relation("DocumentLibraryDocumentUploadProvider")
+}
+
+model Document {
+  id                       String                   @id @default(uuid()) @db.Uuid
+  filename                 String
+  createdAt                DateTime                 @default(now()) @db.Timestamptz(6)
+  uploadStatus             String
+  userId                   String                   @db.Uuid
+  documentUploadProviderId String                   @db.Uuid
+  text                     String?
+  adminCreated             Boolean                  @default(false)
+  dataProfile              Json?
+  sourceJson               Json?
+  chatMessageCitations     ChatMessageCitation[]
+  documentUploadProvider   DocumentUploadProvider   @relation(fields: [documentUploadProviderId], references: [id])
+  user                     User                     @relation(fields: [userId], references: [id])
+  embeddings               Embedding[]
+  adminDocumentGroups      AdminDocumentGroup[]
+  resolutionPairsAsDoc1    DocumentResolutionPair[] @relation("ResolutionPairDoc1")
+  resolutionPairsAsDoc2    DocumentResolutionPair[]         @relation("ResolutionPairDoc2")
+  graphConceptEmbeddings   GraphConceptEmbedding[]
+  graphEntityEmbeddings    GraphEntityEmbedding[]
+  copiedFromAction         SharedDocumentAction?            @relation("CopiedFromShare")
+  sharedDocuments          SharedDocument[]                 @relation("SharedSource")
+  accessUsers              User[]                           @relation("AdminDocumentAccess")
+  collectionMemberships    DocumentCollectionMembership[]
+  aiProviderUsage          AiProviderUsage[]
+}
+
+model AdminDocumentGroup {
+  documentId  String    @db.Uuid
+  userGroupId String    @db.Uuid
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  userGroup   UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, userGroupId])
+  @@index([userGroupId])
+  @@map("admin_document_groups")
+}
+
+model DocumentCollection {
+  id          String                         @id @default(uuid()) @db.Uuid
+  name        String
+  color       String?                        @default("#228BE6")
+  userId      String                         @db.Uuid
+  adminCreated Boolean                       @default(false)
+  createdAt   DateTime                       @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime                       @updatedAt @db.Timestamptz(6)
+  user        User                           @relation("UserDocumentCollections", fields: [userId], references: [id], onDelete: Cascade)
+  memberships DocumentCollectionMembership[]
+
+  @@index([userId])
+  @@index([adminCreated])
+  @@map("document_collections")
+}
+
+model DocumentCollectionMembership {
+  documentId   String             @db.Uuid
+  collectionId String             @db.Uuid
+  addedAt      DateTime           @default(now()) @db.Timestamptz(6)
+  document     Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  collection   DocumentCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, collectionId])
+  @@index([collectionId])
+  @@index([documentId])
+  @@map("document_collection_memberships")
+}
+
+model Embedding {
+  id                   String                @id @default(uuid()) @db.Uuid
+  embedding            Unsupported("vector")
+  content              String
+  contentNum           Int
+  createdAt            DateTime              @default(now()) @db.Timestamptz(6)
+  documentId           String                @db.Uuid
+  endPosition          Int?
+  startPosition        Int?
+  chatMessageCitations ChatMessageCitation[]
+  document             Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, contentNum])
+  @@index([embedding], map: "embedding_hnsw_idx")
+}
+
+model SharedDocument {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  sourceDocumentId       String                 @db.Uuid
+  sourceUserId           String                 @db.Uuid
+  sharedWithUserGroupIds String[]               @db.Uuid
+  createdAt              DateTime               @default(now()) @db.Timestamptz(6)
+  deletedAt              DateTime?              @db.Timestamptz(6)
+  actions                SharedDocumentAction[]
+  sourceDocument         Document               @relation("SharedSource", fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+  sourceUser             User                   @relation("SharedDocumentsCreated", fields: [sourceUserId], references: [id], onDelete: Cascade)
+
+  @@index([sourceUserId])
+  @@map("shared_documents")
+}
+
+model SharedDocumentAction {
+  id               String         @id @default(uuid()) @db.Uuid
+  sharedDocumentId String         @db.Uuid
+  copiedDocumentId String?        @unique @db.Uuid
+  userId           String         @db.Uuid
+  status           String
+  createdAt        DateTime       @default(now()) @db.Timestamptz(6)
+  copiedDocument   Document?      @relation("CopiedFromShare", fields: [copiedDocumentId], references: [id])
+  sharedDocument   SharedDocument @relation(fields: [sharedDocumentId], references: [id], onDelete: Cascade)
+  user             User           @relation("SharedDocumentActions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sharedDocumentId, userId])
+  @@index([userId, status])
+  @@map("shared_document_actions")
+}
+
+model GraphEntityEmbedding {
+  id             String                @id @db.Uuid
+  entityName     String
+  embedding      Unsupported("vector")
+  description    String
+  aliases        String[]
+  documentId     String                @db.Uuid
+  createdAt      DateTime              @default(now()) @db.Timestamptz(6)
+  userId         String                @db.Uuid
+  type           String?
+  normalizedName String?
+  citations      ChatMessageCitation[]
+  document       Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user           User                  @relation("UserGraphEntities", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([entityName])
+  @@index([documentId])
+  @@index([userId])
+  @@index([embedding], map: "graph_entity_embeddings_hnsw_idx")
+  @@map("graph_entity_embeddings")
+}
+
+model GraphConceptEmbedding {
+  id             String                @id @db.Uuid
+  conceptName    String
+  embedding      Unsupported("vector")
+  description    String
+  category       String
+  documentId     String                @db.Uuid
+  createdAt      DateTime              @default(now()) @db.Timestamptz(6)
+  userId         String                @db.Uuid
+  normalizedName String?
+  citations      ChatMessageCitation[]
+  document       Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user           User                  @relation("UserGraphConcepts", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conceptName])
+  @@index([documentId])
+  @@index([userId])
+  @@index([category])
+  @@index([embedding], map: "graph_concept_embeddings_hnsw_idx")
+  @@map("graph_concept_embeddings")
+}
+
+model GraphMetadata {
+  id            String    @id @default(uuid()) @db.Uuid
+  graphId       String    @unique
+  userId        String    @db.Uuid
+  documentIds   String[]  @db.Uuid
+  status        String    @default("Pending")
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  completedAt   DateTime? @db.Timestamptz(6)
+  buildProgress Json?
+  errorMessage  String?
+  stats         Json?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("graph_metadata")
+}
+
+model DocumentResolutionPair {
+  document1Id          String   @db.Uuid
+  document2Id          String   @db.Uuid
+  userId               String   @db.Uuid
+  resolvedAt           DateTime @default(now()) @db.Timestamptz(6)
+  candidatesGenerated  Int      @default(0)
+  identityEdgesCreated Int      @default(0)
+  similarEdgesCreated  Int      @default(0)
+  relatedEdgesCreated  Int      @default(0)
+  document1            Document @relation("ResolutionPairDoc1", fields: [document1Id], references: [id], onDelete: Cascade)
+  document2            Document @relation("ResolutionPairDoc2", fields: [document2Id], references: [id], onDelete: Cascade)
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([document1Id, document2Id])
+  @@index([userId])
+  @@index([document1Id])
+  @@index([document2Id])
+  @@map("document_resolution_pairs")
+}
+
+model GraphBuildRun {
+  id                  String    @id @default(uuid()) @db.Uuid
+  graphId             String
+  userId              String    @db.Uuid
+  runType             String
+  documentIds         String[]  @db.Uuid
+  isIncremental       Boolean   @default(false)
+  newDocumentIds      String[]  @db.Uuid
+  existingDocumentIds String[]  @db.Uuid
+  startedAt           DateTime  @default(now()) @db.Timestamptz(6)
+  completedAt         DateTime? @db.Timestamptz(6)
+  durationMs          Int?
+  stats               Json      @default("{}")
+  warnings            Json      @default("[]")
+  status              String    @default("running")
+  errorMessage        String?
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([graphId])
+  @@index([userId])
+  @@index([startedAt(sort: Desc)])
+  @@index([runType])
+  @@map("graph_build_runs")
+}
+
+model LcatMapping {
+  id          String   @id @default(uuid())
+  lcatName    String   @unique
+  socCode     String
+  socTitle    String
+  description String?
+  isActive    Boolean  @default(true)
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([socCode])
+  @@index([isActive])
+  @@map("lcat_mappings")
+}
+
+model LaborCategory {
+  id            String   @id @default(uuid()) @db.Uuid
+  agentId       String   @db.Uuid
+  socCode       String?
+  lcatCode      String?
+  title         String
+  description   String?
+  geography     String?
+  percentile_10 Float?
+  percentile_25 Float?
+  percentile_50 Float?
+  percentile_75 Float?
+  percentile_90 Float?
+  sourceName    String
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  agent         AiAgent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, socCode], name: "agent_soc_unique")
+  @@unique([agentId, lcatCode], name: "agent_lcat_unique")
+  @@index([agentId])
+  @@index([socCode])
+  @@index([lcatCode])
+  @@index([geography])
+  @@index([sourceName])
+}
+
+model RateCard {
+  id                 String             @id @default(uuid()) @db.Uuid
+  agentId            String             @db.Uuid
+  userId             String             @db.Uuid
+  filename           String
+  uploadStatus       String             @default("pending")
+  createdAt          DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @db.Timestamptz(6)
+  rateCardCategories RateCardCategory[]
+  agent              AiAgent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user               User               @relation(fields: [userId], references: [id])
+
+  @@index([agentId])
+  @@index([userId])
+  @@index([uploadStatus])
+  @@map("rate_cards")
+}
+
+model MarginAnalysis {
+  id                 String   @id @default(uuid()) @db.Uuid
+  agentId            String   @db.Uuid
+  userId             String   @db.Uuid
+  filename           String
+  flaggedJobs        Json
+  tmProfitRanking    Json
+  analysisAsOf       DateTime @db.Timestamptz(6)
+  totalJobsAnalyzed  Int
+  totalFlaggedJobs   Int
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+  taskOrderSummaries Json
+  agent              AiAgent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user               User     @relation(fields: [userId], references: [id])
+
+  @@index([agentId])
+  @@index([userId])
+  @@map("margin_analyses")
+}
+
+model RateCardCategory {
+  id                String    @id @default(uuid()) @db.Uuid
+  rateCardId        String    @db.Uuid
+  laborCategoryName String
+  laborCategoryCode String?
+  experienceLevel   String
+  billRate          Float?
+  educationLevel    String?
+  yearsExperience   String?
+  additionalNotes   String?
+  mappedSocCode     String?
+  mappedSocTitle    String?
+  blsSalaryData     Json?
+  dolSalaryData     Json?
+  lastSalaryUpdate  DateTime? @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
+  rateCard          RateCard  @relation(fields: [rateCardId], references: [id], onDelete: Cascade)
+
+  @@index([rateCardId])
+  @@index([mappedSocCode])
+  @@map("rate_card_categories")
+}
+
+model AgentThread {
+  id               String   @id @default(uuid()) @db.Uuid
+  threadId         String   @unique
+  userId           String   @db.Uuid
+  graphType        String
+  status           String   @default("running")
+  interruptPayload Json?
+  result           Json?
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("agent_threads")
+}
+
+model Workflow {
+  id               String                @id @default(uuid()) @db.Uuid
+  name             String
+  description      String?
+  version          String                @default("1.0.0")
+  definition       Json
+  createdBy        String                @db.Uuid
+  createdAt        DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime              @updatedAt @db.Timestamptz(6)
+  deletedAt        DateTime?             @db.Timestamptz(6)
+  creator          User                  @relation(fields: [createdBy], references: [id])
+  executions       WorkflowExecution[]
+  copiedFromAction SharedWorkflowAction? @relation("CopiedFromWorkflowShare")
+  sharedWorkflows  SharedWorkflow[]      @relation("SharedWorkflowSource")
+  userGroups       UserGroup[]           @relation("UserGroupToWorkflow")
+
+  @@index([createdBy])
+}
+
+model WorkflowExecution {
+  id          String             @id @default(uuid()) @db.Uuid
+  workflowId  String             @db.Uuid
+  status      String
+  triggeredBy String             @db.Uuid
+  input       Json
+  output      Json?
+  trace       Json
+  error       String?
+  startedAt   DateTime           @default(now()) @db.Timestamptz(6)
+  completedAt DateTime?          @db.Timestamptz(6)
+  state       Json?
+  user        User               @relation(fields: [triggeredBy], references: [id])
+  workflow    Workflow           @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  artifacts   WorkflowArtifact[]
+  aiUsage     AiProviderUsage[]
+
+  @@index([workflowId, startedAt])
+  @@index([triggeredBy])
+  @@index([status])
+}
+
+model WorkflowArtifact {
+  id                  String            @id @default(uuid()) @db.Uuid
+  fileExtension       String
+  label               String
+  content             String
+  workflowExecutionId String            @db.Uuid
+  primitiveId         String
+  createdAt           DateTime          @default(now()) @db.Timestamptz(6)
+  githubPagesUrl      String?
+  workflowExecution   WorkflowExecution @relation(fields: [workflowExecutionId], references: [id], onDelete: Cascade)
+
+  @@index([workflowExecutionId])
+  @@index([primitiveId])
+  @@map("workflow_artifacts")
+}
+
+model SharedWorkflow {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  sourceWorkflowId       String                 @db.Uuid
+  sourceUserId           String                 @db.Uuid
+  sharedWithUserGroupIds String[]               @db.Uuid
+  createdAt              DateTime               @default(now()) @db.Timestamptz(6)
+  deletedAt              DateTime?              @db.Timestamptz(6)
+  actions                SharedWorkflowAction[]
+  sourceUser             User                   @relation("SharedWorkflowsCreated", fields: [sourceUserId], references: [id], onDelete: Cascade)
+  sourceWorkflow         Workflow               @relation("SharedWorkflowSource", fields: [sourceWorkflowId], references: [id], onDelete: Cascade)
+
+  @@index([sourceUserId])
+  @@map("shared_workflows")
+}
+
+model SharedWorkflowAction {
+  id               String         @id @default(uuid()) @db.Uuid
+  sharedWorkflowId String         @db.Uuid
+  copiedWorkflowId String?        @unique @db.Uuid
+  userId           String         @db.Uuid
+  status           String
+  createdAt        DateTime       @default(now()) @db.Timestamptz(6)
+  copiedWorkflow   Workflow?      @relation("CopiedFromWorkflowShare", fields: [copiedWorkflowId], references: [id])
+  sharedWorkflow   SharedWorkflow @relation(fields: [sharedWorkflowId], references: [id], onDelete: Cascade)
+  user             User           @relation("SharedWorkflowActions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sharedWorkflowId, userId])
+  @@index([userId, status])
+  @@map("shared_workflow_actions")
+}
+
+model checkpoint_blobs {
+  thread_id     String
+  checkpoint_ns String @default("")
+  channel       String
+  version       String
+  type          String
+  blob          Bytes?
+
+  @@id([thread_id, checkpoint_ns, channel, version])
+  @@index([thread_id])
+}
+
+model checkpoint_migrations {
+  v Int @id
+}
+
+model checkpoint_writes {
+  thread_id     String
+  checkpoint_ns String  @default("")
+  checkpoint_id String
+  task_id       String
+  idx           Int
+  channel       String
+  type          String?
+  blob          Bytes
+
+  @@id([thread_id, checkpoint_ns, checkpoint_id, task_id, idx])
+  @@index([thread_id])
+}
+
+model ArtifactTemplate {
+  id         String      @id @default(uuid()) @db.Uuid
+  filename   String
+  fileData   Bytes
+  createdAt  DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime    @updatedAt @db.Timestamptz(6)
+  userGroups UserGroup[] @relation("ArtifactTemplateToUserGroup")
+}
+
+model checkpoints {
+  thread_id            String
+  checkpoint_ns        String  @default("")
+  checkpoint_id        String
+  parent_checkpoint_id String?
+  type                 String?
+  checkpoint           Json
+  metadata             Json    @default("{}")
+
+  @@id([thread_id, checkpoint_ns, checkpoint_id])
+  @@index([thread_id])
+}

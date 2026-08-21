@@ -1,0 +1,99 @@
+{
+  "entities": [
+    {
+      "id": "company:acme",
+      "label": "Entity",
+      "type": "company",
+      "name": "ACME Defense",
+      "description": "Defense contractor focused on AI-enabled autonomy.",
+      "properties": {
+        "headquarters": "Arlington, VA"
+      }
+    },
+    {
+      "id": "company:patientping",
+      "label": "Entity",
+      "type": "company",
+      "name": "PatientPing",
+      "description": "Healthcare coordination platform."
+    },
+    {
+      "id": "agency:army",
+      "label": "Entity",
+      "type": "agency",
+      "name": "U.S. Army"
+    },
+    {
+      "id": "claim:acme-dod",
+      "label": "Entity",
+      "type": "claim",
+      "name": "ACME fits DoD",
+      "properties": {
+        "rationale": "ACME has deployed production AI systems with DoD.",
+        "claim_subtype": "agency_fit"
+      }
+    },
+    {
+      "id": "partnering_posture:integrator",
+      "label": "Concept",
+      "type": "partnering_posture",
+      "name": "Integrator-friendly"
+    },
+    {
+      "id": "market:defense-ai",
+      "label": "Concept",
+      "type": "market",
+      "name": "Defense AI Market"
+    },
+    {
+      "id": "capability:autonomy",
+      "label": "Concept",
+      "type": "capability",
+      "name": "Autonomous Systems"
+    }
+  ],
+  "relations": [
+    {
+      "source": "company:acme",
+      "target": "capability:autonomy",
+      "type": "HAS_CAPABILITY"
+    },
+    {
+      "source": "company:acme",
+      "target": "agency:army",
+      "type": "RELEVANT_TO_AGENCY"
+    },
+    {
+      "source": "company:acme",
+      "target": "claim:acme-dod",
+      "type": "SUBJECT_OF"
+    },
+    {
+      "source": "claim:acme-dod",
+      "target": "market:defense-ai",
+      "type": "ABOUT_MARKET"
+    },
+    {
+      "source": "company:acme",
+      "target": "partnering_posture:integrator",
+      "type": "HAS_PARTNERING_POSTURE"
+    }
+  ],
+  "supplementary": {
+    "corporate_structure": [
+      {
+        "company_entity_id": "company:patientping",
+        "parent_or_controlling_entity": "Bamboo Health",
+        "normalized_corporate_status": "acquired_or_absorbed",
+        "ownership_notes": ["Acquired 2023"]
+      }
+    ],
+    "partnering_match_hits": [
+      {
+        "company_entity_id": "company:acme",
+        "partnering_posture_id": "partnering_posture:integrator",
+        "match_hits": ["integration-friendly", "open api"]
+      }
+    ]
+  }
+}

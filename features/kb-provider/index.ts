@@ -1,0 +1,1 @@
+export { KBFactory } from './factory';
