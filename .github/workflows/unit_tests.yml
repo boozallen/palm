@@ -21,7 +21,7 @@ jobs:
         run: |
           echo "::set-output name=version::$(node -v)"
       - name: Get node_modules cache
-        uses: actions/cache@v3.0.2
+        uses: actions/cache@v4
         id: node_modules
         with:
           path: |
