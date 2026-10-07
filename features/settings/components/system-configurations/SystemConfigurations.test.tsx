@@ -1,0 +1,96 @@
+import { render } from '@testing-library/react';
+import SystemConfigurations from './SystemConfigurations';
+
+jest.mock('./tables/SystemPersonaTable', () => {
+  return function SystemPersonaTable() {
+    return <div data-testid='system-persona-table' />;
+  };
+});
+
+jest.mock('./tables/TermsOfUseTable', () => {
+  return function TermsOfUseTable() {
+    return <div data-testid='terms-of-use-table' />;
+  };
+});
+
+jest.mock('./tables/LegalPolicyTable', () => {
+  return function LegalPolicyTable() {
+    return <div data-testid='legal-policy-table' />;
+  };
+});
+
+jest.mock('./tables/JoinUserGroupDialogTable', () => {
+  return function JoinUserGroupDialogTable() {
+    return <div data-testid='join-user-group-dialog-table' />;
+  };
+});
+
+jest.mock('./tables/DefaultUserGroupSelectionTable', () => {
+  return function DefaultUserGroupSelectionTable() {
+    return <div data-testid='default-user-group-selection' />;
+  };
+});
+
+jest.mock('./tables/SystemAiProviderModelSelectionTable', () => {
+  return function DefaultUserGroupSelectionTable() {
+    return <div data-testid='system-ai-provider-model-selection-table' />;
+  };
+});
+
+jest.mock('./tables/DocumentLibraryDocumentUploadProviderSelectionTable', () => {
+  return function DocumentLibraryDocumentUploadProviderSelectionTable() {
+    return <div data-testid='document-library-document-upload-provider-selection-table' />;
+  };
+});
+
+jest.mock('./tables/FeatureManagementTable', () => {
+  return function FeatureManagementTable() {
+    return <div data-testid='feature-management-table' />;
+  };
+});
+
+jest.mock('./tables/KnowledgeGraphAiProviderModelSelectionTable', () => {
+  return function KnowledgeGraphAiProviderModelSelectionTable() {
+    return <div data-testid='knowledge-graph-ai-provider-model-selection-table' />;
+  };
+});
+
+jest.mock('./tables/FastAiProviderModelSelectionTable', () => {
+  return function FastAiProviderModelSelectionTable() {
+    return <div data-testid='fast-ai-provider-model-selection-table' />;
+  };
+});
+
+jest.mock('./tables/AzureAdScopesTable', () => {
+  return function AzureAdScopesTable() {
+    return <div data-testid='azure-ad-scopes-table' />;
+  };
+});
+
+describe('SystemConfigurations', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+  });
+
+  it('should render "System Configurations" title', () => {
+    const { queryByText } = render(<SystemConfigurations />);
+    expect(queryByText('System Configurations')).toBeInTheDocument();
+  });
+
+  it('renders tables', () => {
+    const { queryByTestId } = render(<SystemConfigurations />);
+    expect(queryByTestId('system-persona-table')).toBeInTheDocument();
+    expect(queryByTestId('terms-of-use-table')).toBeInTheDocument();
+    expect(queryByTestId('legal-policy-table')).toBeInTheDocument();
+    expect(queryByTestId('join-user-group-dialog-table')).toBeInTheDocument();
+    expect(queryByTestId('default-user-group-selection')).toBeInTheDocument();
+    expect(queryByTestId('system-ai-provider-model-selection-table')).toBeInTheDocument();
+    expect(queryByTestId('knowledge-graph-ai-provider-model-selection-table')).toBeInTheDocument();
+    expect(queryByTestId('fast-ai-provider-model-selection-table')).toBeInTheDocument();
+    expect(queryByTestId('document-library-document-upload-provider-selection-table')).toBeInTheDocument();
+    expect(queryByTestId('azure-ad-scopes-table')).toBeInTheDocument();
+    expect(queryByTestId('feature-management-table')).toBeInTheDocument();
+  });
+
+});

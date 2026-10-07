@@ -1,0 +1,69 @@
+import { z } from 'zod';
+
+import { procedure } from '@/server/trpc';
+import { UserRole } from '@/features/shared/types/user';
+import { Forbidden } from '@/features/shared/errors/routeErrors';
+import getMessage from '@/features/chat/dal/getMessage';
+import getChat from '@/features/chat/dal/getChat';
+import updateMessage from '@/features/chat/dal/updateMessage';
+import { MessageRole } from '@/features/chat/types/message';
+import { enqueueConversationGraphSync } from '@/features/graph-database/utils/worker/conversationGraphQueue';
+import { isMemoryEnabled } from '@/features/graph-database/utils/isMemoryEnabled';
+import { AuditRecordEvent, AuditRecordOutcome } from '@/features/shared/types/audit-record';
+
+const inputSchema = z.object({
+  messageId: z.string().uuid(),
+  content: z.string().min(1),
+});
+
+const outputSchema = z.object({
+  content: z.string(),
+  chatMessageId: z.string().uuid(),
+  chatId: z.string().uuid(),
+});
+
+export default procedure
+  .input(inputSchema)
+  .output(outputSchema)
+  .mutation(async ({ input, ctx }) => {
+    const { messageId, content } = input;
+
+    const message = await getMessage(messageId);
+    const chat = await getChat(message.chatId);
+
+    if (ctx.userRole !== UserRole.Admin && chat.userId !== ctx.userId) {
+      ctx.logger.error(
+        `You do not have permission to edit this message: userId: ${ctx.userId}, messageId: ${messageId}`
+      );
+      ctx.auditor.createAuditRecord({
+        outcome: AuditRecordOutcome.Warn,
+        event: AuditRecordEvent.EditMessage,
+        description: `User ${ctx.userId} attempted to edit message ${messageId} in chat ${message.chatId} without permission`,
+      });
+      throw Forbidden('You do not have permission to edit this message');
+    }
+
+    await updateMessage({
+      messageId,
+      content,
+      ...(message.role === MessageRole.User && { clearGraphSnapshot: true }),
+    });
+    if (await isMemoryEnabled()) {
+      void enqueueConversationGraphSync({
+        chatId: message.chatId,
+        messageIds: [messageId],
+      });
+    }
+
+    ctx.auditor.createAuditRecord({
+      outcome: AuditRecordOutcome.Success,
+      event: AuditRecordEvent.EditMessage,
+      description: `User ${ctx.userId} edited message ${messageId} in chat ${message.chatId}`,
+    });
+
+    return {
+      content,
+      chatMessageId: messageId,
+      chatId: message.chatId,
+    };
+  });

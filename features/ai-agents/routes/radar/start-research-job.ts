@@ -1,0 +1,207 @@
+import { z } from 'zod';
+import crypto from 'crypto';
+
+import { procedure } from '@/server/trpc';
+import { storage } from '@/server/storage/redis';
+import { getRadarQueue } from '@/features/ai-agents/utils/radar/worker/queue';
+import {
+  generateSearchHash,
+  generateCacheKey,
+  generateActiveJobKey,
+} from '@/features/ai-agents/utils/radar/searchHash';
+import getAvailableAgents from '@/features/shared/dal/getAvailableAgents';
+import { AiAgentType } from '@/features/shared/types';
+import { Forbidden } from '@/features/shared/errors/routeErrors';
+import resolveUserGroupId from '@/features/shared/services/resolveUserGroupId';
+import logger from '@/server/logger';
+import {
+  AuditRecordEvent,
+  AuditRecordOutcome,
+  AuditRecordResourceType,
+} from '@/features/shared/types/audit-record';
+
+const researchInput = z.object({
+  agentId: z.string().uuid(),
+  dateStart: z.string(),
+  dateEnd: z.string(),
+  model: z.string().uuid(),
+  categories: z.array(z.string()),
+  institutions: z.array(z.string()),
+  userGroupId: z.string().uuid().nullish(),
+});
+
+export const startResearchJob = procedure
+  .input(researchInput)
+  .mutation(async ({ ctx, input }) => {
+    const agents = await getAvailableAgents(ctx.userId);
+    const agent = agents.find((agent) => agent.id === input.agentId && agent.type === AiAgentType.RADAR);
+
+    if (!agent) {
+      ctx.auditor.createAuditRecord({
+        event: AuditRecordEvent.AiAgentRadarFormSubmission,
+        outcome: AuditRecordOutcome.Warn,
+        description: `User attempted to submit a RADAR research job but lacked access to agent "${input.agentId}"`,
+        metadata: {
+          resourceType: AuditRecordResourceType.AiAgentJob,
+          aiAgentId: input.agentId,
+        },
+      });
+      throw Forbidden(
+        'You do not have permission to access this resource.'
+      );
+    }
+
+    let userGroupId: string | null;
+    try {
+      userGroupId = await resolveUserGroupId(ctx.userId, input.userGroupId);
+    } catch (error) {
+      ctx.auditor.createAuditRecord({
+        event: AuditRecordEvent.AiAgentRadarFormSubmission,
+        outcome: AuditRecordOutcome.Warn,
+        description: 'User attempted to submit a RADAR research job but lacked permission for the selected group',
+        metadata: {
+          resourceType: AuditRecordResourceType.AiAgentJob,
+          aiAgentId: input.agentId,
+        },
+      });
+      throw error;
+    }
+
+    const searchHash = generateSearchHash({
+      dateStart: input.dateStart,
+      dateEnd: input.dateEnd,
+      categories: input.categories,
+      institutions: input.institutions,
+    });
+
+    const cacheKey = generateCacheKey(searchHash);
+    const activeJobKey = generateActiveJobKey(searchHash);
+
+    // Check if we have cached results for this search
+    const cachedResults = await storage.get(cacheKey);
+
+    if (cachedResults) {
+      // Create a 'completed' job with cached results
+      const jobId = crypto.randomUUID();
+
+      await storage.hset(`radar-job:${jobId}`, {
+        status: 'completed',
+        created: Date.now(),
+        completed: Date.now(),
+        progress: 'Found cached results!',
+        results: cachedResults,
+        searchHash,
+        fromCache: 'true',
+      });
+
+      ctx.logger.debug(
+        `Returning cached results for search hash: ${searchHash}`
+      );
+      ctx.auditor.createAuditRecord({
+        event: AuditRecordEvent.AiAgentRadarFormSubmission,
+        outcome: AuditRecordOutcome.Success,
+        description: `User submitted a RADAR research job for agent "${input.agentId}"`,
+        metadata: {
+          resourceType: AuditRecordResourceType.AiAgentJob,
+          resourceIds: [jobId],
+          aiAgentId: input.agentId,
+          aiAgentJobId: jobId,
+        },
+      });
+      return { jobId };
+    }
+
+    // Check if there's already an active job for this search
+    const activeJobId = await storage.get(activeJobKey);
+
+    if (activeJobId) {
+      // Piggyback off the existing job
+      const existingJob = await storage.hgetall(`radar-job:${activeJobId}`);
+
+      if (existingJob.status && existingJob.status !== 'error') {
+        ctx.logger.debug(
+          `Piggybacking off existing job ${activeJobId} for search hash: ${searchHash}`
+        );
+        ctx.auditor.createAuditRecord({
+          event: AuditRecordEvent.AiAgentRadarFormSubmission,
+          outcome: AuditRecordOutcome.Success,
+          description: `User submitted a RADAR research job for agent "${input.agentId}"`,
+          metadata: {
+            resourceType: AuditRecordResourceType.AiAgentJob,
+            resourceIds: [activeJobId],
+            aiAgentId: input.agentId,
+            aiAgentJobId: activeJobId,
+          },
+        });
+        return { jobId: activeJobId };
+      } else {
+        await storage.del(activeJobKey);
+      }
+    }
+
+    // No cached results and no active job, start new job
+    const jobId = crypto.randomUUID();
+
+    // Mark this job as active for this search hash for one hour
+    await storage.setex(activeJobKey, 3600, jobId);
+
+    await storage.hset(`radar-job:${jobId}`, {
+      status: 'processing',
+      created: Date.now(),
+      progress: 'Initializing research...',
+      searchHash,
+    });
+
+    const queue = getRadarQueue();
+    if (!queue) {
+      await storage.del(activeJobKey);
+      logger.warn('RADAR queue is not initialized — job not queued.');
+      ctx.auditor.createAuditRecord({
+        event: AuditRecordEvent.AiAgentRadarFormSubmission,
+        outcome: AuditRecordOutcome.Error,
+        description: 'User failed to submit a RADAR research job: job queue unavailable',
+        metadata: {
+          resourceType: AuditRecordResourceType.AiAgentJob,
+          aiAgentId: input.agentId,
+        },
+      });
+      throw new Error('RADAR agent is not available at this time.');
+    }
+
+    try {
+      await queue.add('researchJob', {
+        ...input,
+        jobId,
+        userId: ctx.userId,
+        searchHash,
+        userGroupId,
+      });
+
+      ctx.auditor.createAuditRecord({
+        event: AuditRecordEvent.AiAgentRadarFormSubmission,
+        outcome: AuditRecordOutcome.Success,
+        description: `User submitted a RADAR research job for agent "${input.agentId}"`,
+        metadata: {
+          resourceType: AuditRecordResourceType.AiAgentJob,
+          resourceIds: [jobId],
+          aiAgentId: input.agentId,
+          aiAgentJobId: jobId,
+        },
+      });
+
+      return { jobId };
+    } catch (error) {
+      await storage.del(activeJobKey);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      ctx.auditor.createAuditRecord({
+        event: AuditRecordEvent.AiAgentRadarFormSubmission,
+        outcome: AuditRecordOutcome.Error,
+        description: `User failed to submit a RADAR research job: ${errorMessage}`,
+        metadata: {
+          resourceType: AuditRecordResourceType.AiAgentJob,
+          aiAgentId: input.agentId,
+        },
+      });
+      throw error;
+    }
+  });
